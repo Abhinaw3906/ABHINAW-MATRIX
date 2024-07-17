@@ -1,0 +1,176 @@
+import pandas as pd
+import numpy as np
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import matplotlib.pyplot as plt
+
+# Define the functions
+
+def delta(a, b):
+    """Delta function to compare two characters."""
+    return 1 if a == b else 0
+
+def modify_candidate_string(C, n):
+    """Modify the candidate string to match the length of the reference string."""
+    m = len(C)
+    if m >= n:
+        return C[:n]
+    else:
+        return C + ' ' * (n - m)  # Using space as the padding character
+
+def brevity_adjustment(n, m):
+    """Calculate the brevity adjustment factor."""
+    if m >= n:
+        return np.exp(1 - m / n)
+    else:
+        return 1
+
+def string_comparison(R, C):
+    """Compare reference string R with candidate string C and return the score along with detailed comparisons."""
+    n = len(R)
+    C_mod = modify_candidate_string(C, n)
+    
+    comparisons = []
+    score = 0
+    for i in range(n):
+        match_score = delta(R[i], C_mod[i])
+        comparisons.append((R[i], C_mod[i], match_score))
+        score += match_score
+    
+    return score, comparisons
+
+def normalized_score(R, candidate_strings):
+    """Calculate the normalized score for multiple candidate strings and provide detailed output."""
+    n = len(R)
+    k = len(candidate_strings)
+    
+    all_comparisons = []
+    scores = []
+    brevity_adjustments = []
+    
+    try:
+        cosine_scores = calculate_cosine_similarity(R, candidate_strings)
+    except ValueError as e:
+        print(f"We have encountered an error due to reason: {e}")
+        # Return a score of 1 for each candidate string due to the error
+        for C in candidate_strings:
+            m = len(C)
+            BA = brevity_adjustment(n, m)
+            score, comparisons = string_comparison(R, C)
+            final_score = 1  # Setting the score to 1
+            condition_used = 'Error encountered'
+            scores.append((final_score, condition_used))
+            brevity_adjustments.append(BA)
+            all_comparisons.append((C, comparisons))
+        avg_score = 1
+        return avg_score, all_comparisons, scores, [1] * k, n, k, brevity_adjustments
+
+    for i, C in enumerate(candidate_strings):
+        m = len(C)
+        BA = brevity_adjustment(n, m)
+        score, comparisons = string_comparison(R, C)
+        if cosine_scores[i] > 0.9:
+            final_score = cosine_scores[i] * BA
+            condition_used = 'if condition (cosine similarity > 0.9)'
+        else:
+            final_score = (score / n) * BA
+            condition_used = 'else condition (cosine similarity <= 0.9)'
+        scores.append((final_score, condition_used))
+        brevity_adjustments.append(BA)
+        all_comparisons.append((C, comparisons))
+    
+    avg_score = sum(score for score, _ in scores) / k
+    
+    return avg_score, all_comparisons, scores, cosine_scores, n, k, brevity_adjustments
+
+def display_comparisons(R, candidate_strings, all_comparisons, scores, cosine_scores, n, k, brevity_adjustments):
+    """Display detailed comparisons in a user-friendly format."""
+    print("\nDetailed Comparisons:")
+    print("---------------------")
+    for idx, (C, comparisons) in enumerate(all_comparisons):
+        print(f"Candidate String {idx + 1}: '{C}'")
+        print(f"{'R[i]':>5} {'C[i]':>5} {'Points':>7}")
+        print("-" * 20)
+        for r_char, c_char, points in comparisons:
+            c_char_display = c_char if c_char != ' ' else 'NULL'
+            print(f"{r_char:>5} {c_char_display:>5} {points:>7}")
+        print()
+    
+    print("\nCalculations:")
+    print("---------------------")
+    for idx, (score, condition) in enumerate(scores):
+        print(f"Candidate String {idx + 1}: {candidate_strings[idx]}")
+        print(f"Condition used: {condition}")
+        if 'if condition' in condition:
+            print(f"Cosine Similarity: {cosine_scores[idx]:.4f} * Brevity Adjustment: {brevity_adjustments[idx]:.4f} = Final Score: {score:.4f}")
+        else:
+            print(f"(Score: {scores[idx][0]:.4f} / Length: {n}) * Brevity Adjustment: {brevity_adjustments[idx]:.4f} = Final Score: {score:.4f}")
+        print("-" * 40)
+    
+    print(f"\nNumber of Comparisons: {k}")
+    print(f"Normalized Scores: {[score for score, _ in scores]}")
+
+def calculate_cosine_similarity(R, candidate_strings):
+    """Calculate cosine similarity between the reference string and candidate strings."""
+    vectorizer = CountVectorizer().fit_transform([R] + candidate_strings)
+    vectors = vectorizer.toarray()
+    cosine_similarities = cosine_similarity(vectors[0:1], vectors[1:]).flatten()
+    return cosine_similarities
+
+def visualize_data(df, avg_score):
+    """Visualize the scores and cosine similarity in a tabular and graphical format."""
+    fig, ax = plt.subplots(figsize=(12, 6))
+    
+    # Plot the table
+    ax.axis('tight')
+    ax.axis('off')
+    table = ax.table(cellText=df.values, colLabels=df.columns, cellLoc='center', loc='center')
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    table.scale(1.2, 1.2)
+
+    plt.title('Candidate Strings Analysis', fontsize=14, fontweight='bold')
+    plt.show()
+
+    # Plot the final score
+    plt.figure(figsize=(10, 2))
+    plt.text(0.5, 0.5, f'Final Normalized Score: {avg_score:.2f}', horizontalalignment='center', verticalalignment='center', fontsize=20, fontweight='bold')
+    plt.axis('off')
+    plt.show()
+
+# Read the Excel file
+file_path ="C:/Users/ABHINAW JAGTAP/Desktop/IIT JAMMU/dissertation/textGen/sheet details/human/new.xlsx"
+df = pd.read_excel(file_path)
+
+# Extract candidate strings from the dataframe and convert to lower case
+candidate_strings = df['text'].str.lower().tolist()
+
+# User input
+R = input("Enter the reference string: ").lower()
+
+# Calculate normalized score and get detailed comparisons
+avg_score, all_comparisons, scores, cosine_scores, n, k, brevity_adjustments = normalized_score(R, candidate_strings)
+
+# Display detailed comparisons
+display_comparisons(R, candidate_strings, all_comparisons, scores, cosine_scores, n, k, brevity_adjustments)
+
+# Create a DataFrame to save the scores and cosine similarity
+scores_df = pd.DataFrame({
+    'Candidate String': candidate_strings,
+    'Final Score': [score for score, _ in scores],
+    'Condition Used': [condition for _, condition in scores],
+    'Cosine Similarity': cosine_scores,
+    'Brevity Adjustment': brevity_adjustments
+})
+
+output_file_path = "candidate_scores.xlsx"
+scores_df.to_excel(output_file_path, index=False)
+
+print("\nTabular Summary:")
+print(scores_df)
+
+# Visualize the data
+visualize_data(scores_df, avg_score)
+
+print(f"\nThe final normalized similarity score for the reference string '{R}' and candidate strings is: {avg_score:.2f}")
+print(f"Scores have been saved to {output_file_path}")
