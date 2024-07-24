@@ -3,6 +3,7 @@ import numpy as np
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import matplotlib.pyplot as plt
+import re
 
 # Define the functions
 
@@ -13,7 +14,7 @@ def delta(a, b):
 def modify_candidate_string(C, n):
     """Modify the candidate string to match the length of the reference string."""
     m = len(C)
-    if m >= n:
+    if (m >= n):
         return C[:n]
     else:
         return C + ' ' * (n - m)  # Using space as the padding character
@@ -63,7 +64,8 @@ def normalized_score(R, candidate_strings):
             brevity_adjustments.append(BA)
             all_comparisons.append((C, comparisons))
         avg_score = 1
-        return avg_score, all_comparisons, scores, [1] * k, n, k, brevity_adjustments
+        stddev_score = 0
+        return avg_score, stddev_score, all_comparisons, scores, [1] * k, n, k, brevity_adjustments
 
     for i, C in enumerate(candidate_strings):
         m = len(C)
@@ -80,8 +82,9 @@ def normalized_score(R, candidate_strings):
         all_comparisons.append((C, comparisons))
     
     avg_score = sum(score for score, _ in scores) / k
+    stddev_score = np.std([score for score, _ in scores])
     
-    return avg_score, all_comparisons, scores, cosine_scores, n, k, brevity_adjustments
+    return avg_score, stddev_score, all_comparisons, scores, cosine_scores, n, k, brevity_adjustments
 
 def display_comparisons(R, candidate_strings, all_comparisons, scores, cosine_scores, n, k, brevity_adjustments):
     """Display detailed comparisons in a user-friendly format."""
@@ -117,7 +120,7 @@ def calculate_cosine_similarity(R, candidate_strings):
     cosine_similarities = cosine_similarity(vectors[0:1], vectors[1:]).flatten()
     return cosine_similarities
 
-def visualize_data(df, avg_score):
+def visualize_data(df, avg_score, stddev_score):
     """Visualize the scores and cosine similarity in a tabular and graphical format."""
     fig, ax = plt.subplots(figsize=(12, 6))
     
@@ -137,19 +140,26 @@ def visualize_data(df, avg_score):
     plt.text(0.5, 0.5, f'Final Normalized Score: {avg_score:.2f}', horizontalalignment='center', verticalalignment='center', fontsize=20, fontweight='bold')
     plt.axis('off')
     plt.show()
+    
+    # Plot the standard deviation
+    plt.figure(figsize=(10, 2))
+    plt.text(0.5, 0.5, f'Standard Deviation of Scores: {stddev_score:.2f}', horizontalalignment='center', verticalalignment='center', fontsize=20, fontweight='bold')
+    plt.axis('off')
+    plt.show()
 
 # Read the Excel file
-file_path ="C:/Users/ABHINAW JAGTAP/Desktop/IIT JAMMU/dissertation/textGen/sheet details/human/new.xlsx"
+file_path = "C:/Users/ABHINAW JAGTAP/Desktop/IIT JAMMU/dissertation/textGen/sheet details/ABHINAW MATRIX/20.xlsx"
 df = pd.read_excel(file_path)
 
-# Extract candidate strings from the dataframe and convert to lower case
-candidate_strings = df['text'].str.lower().tolist()
+# Extract candidate strings from the dataframe and convert to lower case, filtering out non-alphabet characters
+candidate_strings = df['text'].astype(str).apply(lambda x: re.sub(r'[^a-zA-Z\s]', '', x)).str.lower().tolist()
 
 # User input
 R = input("Enter the reference string: ").lower()
+R = re.sub(r'[^a-zA-Z\s]', '', R)
 
 # Calculate normalized score and get detailed comparisons
-avg_score, all_comparisons, scores, cosine_scores, n, k, brevity_adjustments = normalized_score(R, candidate_strings)
+avg_score, stddev_score, all_comparisons, scores, cosine_scores, n, k, brevity_adjustments = normalized_score(R, candidate_strings)
 
 # Display detailed comparisons
 display_comparisons(R, candidate_strings, all_comparisons, scores, cosine_scores, n, k, brevity_adjustments)
@@ -170,7 +180,8 @@ print("\nTabular Summary:")
 print(scores_df)
 
 # Visualize the data
-visualize_data(scores_df, avg_score)
+visualize_data(scores_df, avg_score, stddev_score)
 
 print(f"\nThe final normalized similarity score for the reference string '{R}' and candidate strings is: {avg_score:.2f}")
+print(f"The standard deviation of the scores is: {stddev_score:.2f}")
 print(f"Scores have been saved to {output_file_path}")
